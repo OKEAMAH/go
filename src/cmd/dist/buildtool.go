@@ -119,8 +119,8 @@ var ignoreSuffixes = []string{
 }
 
 var tryDirs = []string{
-	"sdk/go1.17",
-	"go1.17",
+	"sdk/go1.22.6",
+	"go1.22.6",
 }
 
 func bootstrapBuildTools() {
@@ -312,9 +312,6 @@ var (
 
 func bootstrapFixImports(srcFile string) string {
 	text := readfile(srcFile)
-	if !strings.Contains(srcFile, "/cmd/") && !strings.Contains(srcFile, `\cmd\`) {
-		text = regexp.MustCompile(`\bany\b`).ReplaceAllString(text, "interface{}")
-	}
 	lines := strings.SplitAfter(text, "\n")
 	inBlock := false
 	inComment := false
