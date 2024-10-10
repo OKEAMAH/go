@@ -157,6 +157,22 @@ no-op. This behavior is controlled by the `randseednop` setting.
 For Go 1.24 it defaults to `randseednop=1`.
 Using `randseednop=0` reverts to the pre-Go 1.24 behavior.
 
+Go 1.24 added new values for the `multipathtcp` setting.
+The possible values for `multipathtcp` are now:
+- "0": disable MPTCP on dialers and listeners by default
+- "1": enable MPTCP on dialers and listeners by default
+- "2": enable MPTCP on listeners only by default
+- "3": enable MPTCP on dialers only by default
+
+For Go 1.24, it now defaults to multipathtcp="2", thus
+enabled by default on listerners. Using multipathtcp="0" reverts to the
+pre-Go 1.24 behavior.
+
+Go 1.24 changed [`crypto/rand.Read`](/pkg/crypto/rand/#Read) to crash the
+program on any error. This setting is controlled by the `randcrash` setting.
+For Go 1.24 it defaults to `randcrash=1`.
+Using `randcrash=0` reverts to the pre-Go 1.24 behavior.
+
 ### Go 1.23
 
 Go 1.23 changed the channels created by package time to be unbuffered

@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"internal/testenv"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -164,7 +164,7 @@ L7 uses var z int`
 		fact := fmt.Sprintf("L%d uses %s", id.Pos().Line(), obj)
 		facts = append(facts, fact)
 	}
-	sort.Strings(facts)
+	slices.Sort(facts)
 
 	got := strings.Join(facts, "\n")
 	if got != want {
@@ -1139,5 +1139,31 @@ type (
 	const want = "type p.T struct{}"
 	if got != want {
 		t.Errorf("got %s, want %s", got, want)
+	}
+}
+
+func TestIssue69092(t *testing.T) {
+	const src = `
+package p
+
+var _ = T{{x}}
+`
+
+	file := mustParse(src)
+	conf := Config{Error: func(err error) {}} // ignore errors
+	info := Info{Types: make(map[syntax.Expr]TypeAndValue)}
+	conf.Check("p", []*syntax.File{file}, &info)
+
+	// look for {x} expression
+	outer := file.DeclList[0].(*syntax.VarDecl).Values.(*syntax.CompositeLit) // T{{x}}
+	inner := outer.ElemList[0]                                                // {x}
+
+	// type of {x} must have been recorded
+	tv, ok := info.Types[inner]
+	if !ok {
+		t.Fatal("no type found for {x}")
+	}
+	if tv.Type != Typ[Invalid] {
+		t.Fatalf("unexpected type for {x}: %s", tv.Type)
 	}
 }

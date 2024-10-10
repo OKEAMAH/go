@@ -31,6 +31,10 @@ type mOS struct {
 	// needPerThreadSyscall indicates that a per-thread syscall is required
 	// for doAllThreadsSyscall.
 	needPerThreadSyscall atomic.Uint8
+
+	// This is a pointer to a chunk of memory allocated with a special
+	// mmap invocation in vgetrandomGetState().
+	vgetrandomState uintptr
 }
 
 //go:noescape
@@ -292,13 +296,19 @@ func sysargs(argc int32, argv **byte) {
 var secureMode bool
 
 func sysauxv(auxv []uintptr) (pairs int) {
+	// Process the auxiliary vector entries provided by the kernel when the
+	// program is executed. See getauxval(3).
 	var i int
 	for ; auxv[i] != _AT_NULL; i += 2 {
 		tag, val := auxv[i], auxv[i+1]
 		switch tag {
 		case _AT_RANDOM:
-			// The kernel provides a pointer to 16-bytes
-			// worth of random data.
+			// The kernel provides a pointer to 16 bytes of cryptographically
+			// random data. Note that in cgo programs this value may have
+			// already been used by libc at this point, and in particular glibc
+			// and musl use the value as-is for stack and pointer protector
+			// cookies from libc_start_main and/or dl_start. Also, cgo programs
+			// may use the value after we do.
 			startupRand = (*[16]byte)(unsafe.Pointer(val))[:]
 
 		case _AT_PAGESZ:
@@ -344,11 +354,14 @@ func osinit() {
 	ncpu = getproccount()
 	physHugePageSize = getHugePageSize()
 	osArchInit()
+	vgetrandomInit()
 }
 
 var urandom_dev = []byte("/dev/urandom\x00")
 
 func readRandom(r []byte) int {
+	// Note that all supported Linux kernels should provide AT_RANDOM which
+	// populates startupRand, so this fallback should be unreachable.
 	fd := open(&urandom_dev[0], 0 /* O_RDONLY */, 0)
 	n := read(fd, unsafe.Pointer(&r[0]), int32(len(r)))
 	closefd(fd)
@@ -400,6 +413,10 @@ func unminit() {
 // Called from exitm, but not from drop, to undo the effect of thread-owned
 // resources in minit, semacreate, or elsewhere. Do not take locks after calling this.
 func mdestroy(mp *m) {
+	if mp.vgetrandomState != 0 {
+		vgetrandomPutState(mp.vgetrandomState)
+		mp.vgetrandomState = 0
+	}
 }
 
 // #ifdef GOARCH_386
@@ -879,8 +896,9 @@ func runPerThreadSyscall() {
 }
 
 const (
-	_SI_USER  = 0
-	_SI_TKILL = -6
+	_SI_USER     = 0
+	_SI_TKILL    = -6
+	_SYS_SECCOMP = 1
 )
 
 // sigFromUser reports whether the signal was sent because of a call
@@ -890,6 +908,14 @@ const (
 func (c *sigctxt) sigFromUser() bool {
 	code := int32(c.sigcode())
 	return code == _SI_USER || code == _SI_TKILL
+}
+
+// sigFromSeccomp reports whether the signal was sent from seccomp.
+//
+//go:nosplit
+func (c *sigctxt) sigFromSeccomp() bool {
+	code := int32(c.sigcode())
+	return code == _SYS_SECCOMP
 }
 
 //go:nosplit

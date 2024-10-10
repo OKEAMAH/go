@@ -16,24 +16,29 @@ import (
 )
 
 func TestOpen_Dir(t *testing.T) {
-	dir := t.TempDir()
+	t.Parallel()
 
-	h, err := syscall.Open(dir, syscall.O_RDONLY, 0)
-	if err != nil {
-		t.Fatalf("Open failed: %v", err)
+	dir := t.TempDir()
+	tests := []struct {
+		flag int
+		err  error
+	}{
+		{syscall.O_RDONLY, nil},
+		{syscall.O_CREAT, nil},
+		{syscall.O_RDONLY | syscall.O_CREAT, nil},
+		{syscall.O_RDONLY | syscall.O_TRUNC, syscall.ERROR_ACCESS_DENIED},
+		{syscall.O_WRONLY | syscall.O_RDWR, syscall.EISDIR},
+		{syscall.O_WRONLY, syscall.EISDIR},
+		{syscall.O_RDWR, syscall.EISDIR},
 	}
-	syscall.CloseHandle(h)
-	h, err = syscall.Open(dir, syscall.O_RDONLY|syscall.O_TRUNC, 0)
-	if err == nil {
-		t.Error("Open should have failed")
-	} else {
-		syscall.CloseHandle(h)
-	}
-	h, err = syscall.Open(dir, syscall.O_RDONLY|syscall.O_CREAT, 0)
-	if err == nil {
-		t.Error("Open should have failed")
-	} else {
-		syscall.CloseHandle(h)
+	for i, tt := range tests {
+		h, err := syscall.Open(dir, tt.flag, 0)
+		if err == nil {
+			syscall.CloseHandle(h)
+		}
+		if err != tt.err {
+			t.Errorf("%d: Open got %v, want %v", i, err, tt.err)
+		}
 	}
 }
 
@@ -182,12 +187,14 @@ int main(int argc, char *argv[])
 
 func TestGetwd_DoesNotPanicWhenPathIsLong(t *testing.T) {
 	// Regression test for https://github.com/golang/go/issues/60051.
+	tmp := t.TempDir()
+	t.Chdir(tmp)
 
 	// The length of a filename is also limited, so we can't reproduce the
 	// crash by creating a single directory with a very long name; we need two
 	// layers.
 	a200 := strings.Repeat("a", 200)
-	dirname := filepath.Join(t.TempDir(), a200, a200)
+	dirname := filepath.Join(tmp, a200, a200)
 
 	err := os.MkdirAll(dirname, 0o700)
 	if err != nil {
@@ -197,9 +204,6 @@ func TestGetwd_DoesNotPanicWhenPathIsLong(t *testing.T) {
 	if err != nil {
 		t.Skipf("Chdir failed: %v", err)
 	}
-	// Change out of the temporary directory so that we don't inhibit its
-	// removal during test cleanup.
-	defer os.Chdir(`\`)
 
 	syscall.Getwd()
 }

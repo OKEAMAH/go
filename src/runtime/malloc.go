@@ -227,7 +227,7 @@ const (
 	// --------------  ---------  ----------  ----------  -----------
 	//       */64-bit         48        64MB           1    4M (32MB)
 	// windows/64-bit         48         4MB          64    1M  (8MB)
-	//      ios/arm64         33         4MB           1  2048  (8KB)
+	//      ios/arm64         40         4MB           1  256K  (2MB)
 	//       */32-bit         32         4MB           1  1024  (4KB)
 	//     */mips(le)         31         4MB           1   512  (2KB)
 
@@ -1447,6 +1447,11 @@ func newarray(typ *_type, n int) unsafe.Pointer {
 //
 //go:linkname reflect_unsafe_NewArray reflect.unsafe_NewArray
 func reflect_unsafe_NewArray(typ *_type, n int) unsafe.Pointer {
+	return newarray(typ, n)
+}
+
+//go:linkname maps_newarray internal/runtime/maps.newarray
+func maps_newarray(typ *_type, n int) unsafe.Pointer {
 	return newarray(typ, n)
 }
 
